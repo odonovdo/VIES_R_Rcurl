@@ -1,0 +1,61 @@
+#### App to get vat number validations, names and addresses for a list of VAT numbers
+
+library(RCurl)
+library(XML)
+
+### Readin the list of VAT number you want to check
+VATList <- read.csv(fileofVATnos)          
+
+### Add a counter so as to clean memory in lapppy loop ??? 
+Counter = 0 
+
+ResultsofVIES <- lapply(VATList$VATreg, function(x)### VAT reg containes country code
+  ### Seperate VAT and Country Code
+  VATReg <- gsub("^([A-Z]+)([0-9]+.*)","\\2",x)
+  Country <- gsub("^([A-Z]+)([0-9]+.*)","\\1",x)
+  
+  Counter <<- Counter +1
+ 
+  bodyREquest <- paste0('<?xml version="1.0" encoding="UTF-8"?> <soap:Envelope
+                        xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                        xmlns:tns1="urn:ec.europa.eu:taxud:vies:services:checkVat"
+                        xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+                        xmlns:ins0="urn:ec.europa.eu:taxud:vies:services:checkVat:types">
+                        <soap:Body>
+                        <ins0:checkVat>
+                        <ins0:countryCode>',Country,'</ins0:countryCode>
+                        <ins0:vatNumber>',VATReg,'</ins0:vatNumber>
+                        </ins0:checkVat>
+                        </soap:Body>
+                        </soap:Envelope>')
+ 
+  ###For Capturing data
+  reader = basicTextGatherer()
+ 
+  myHeader <- c(Accept = "text",
+                Accept = "multipart/*",
+               'Content-Type' = "text/xml,charset=utf-8",
+                SOAPAction="urn:ec.europa.eu:taxud:vies:services:checkVat:types")
+ 
+  data =  curlPerform(url = "http://ec.europa.eu/taxation_customs/vies/services/checkVatService",
+                      postfields= bodyREquest,
+                      httpheader= myHeader,
+                      writefunction = reader$update,
+                      verbose=FALSE)
+  ###ReadinReturn
+  data <- reader$value()
+ 
+  CallDataFrame <- t(do.call(cbind,xmlToList(data,simplify = TRUE,addAttributes = TRUE)))
+ 
+  ###Return to List
+  CallDataFrame
+ 
+  ### Clean Head Space every 1000 calls
+  if(Counter %% 1000 == 0){
+    gc(verbose =FALSE)
+  }
+ 
+})
+ 
+ ### Save results
+write.csv(do.call(rbind.data.frame,ResultsofVIES),"NameOfFileToSave.csv")
